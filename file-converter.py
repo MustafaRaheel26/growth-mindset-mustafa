@@ -15,15 +15,29 @@ files = st.file_uploader("Upload CSV or Excel files", type=["csv", "xlsx"], acce
 if files:
     for file in files:
         ext = file.name.split(".")[-1]  # Extract file extension
-        df = pd.read_csv(file) if ext == "csv" else pd.read_excel(file)
         
+        # Read file based on extension with error handling
+        try:
+            if ext == "csv":
+                df = pd.read_csv(file)
+            elif ext == "xlsx":
+                df = pd.read_excel(file, engine="openpyxl")
+            else:
+                st.error("Invalid file format. Please upload CSV or Excel files.")
+                continue
+        except Exception as e:
+            st.error(f"Error reading file {file.name}: {e}")
+            continue
+        
+        # Display file preview
         st.subheader(f"{file.name} - Preview")
         st.dataframe(df.head())  # Show first few rows
 
         # Option to remove duplicates
         if st.checkbox(f"Remove Duplicates - {file.name}"):
+            initial_shape = df.shape
             df = df.drop_duplicates()
-            st.success("Duplicates removed successfully!")
+            st.success(f"Duplicates removed successfully! {initial_shape[0] - df.shape[0]} rows removed.")
             st.dataframe(df.head())
 
         # Select specific columns to keep
@@ -33,11 +47,19 @@ if files:
 
         # Show chart for numerical data
         if st.checkbox(f"Show Chart - {file.name}") and not df.select_dtypes(include=["number"]).empty:
+            st.subheader(f"Chart for {file.name}")
             st.bar_chart(df.select_dtypes(include=["number"]).iloc[:, :2])  # Show chart for first 2 numeric columns
+
+        # Option to fill missing values with a default value
+        if st.checkbox(f"Fill Missing Values - {file.name}"):
+            fill_value = st.text_input(f"Enter value to fill missing data - {file.name}", value="0")
+            df = df.fillna(fill_value)
+            st.success("Missing values filled!")
+            st.dataframe(df.head())
 
         # File format selection for conversion
         format_choice = st.radio(f"Convert {file.name} to:", ["CSV", "Excel"], key=file.name)
-        
+
         # Button to download the processed file
         if st.button(f"Download {file.name} as {format_choice}"):
             output = BytesIO()
@@ -45,11 +67,11 @@ if files:
             if format_choice.lower() == "csv":
                 df.to_csv(output, index=False)
                 mime_type = "text/csv"
-                new_name = file.name.replace(ext, "csv")  
+                new_name = file.name.replace(ext, "csv")
             else:
                 df.to_excel(output, index=False, engine="openpyxl")
                 mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                new_name = file.name.replace(ext, "xlsx")   
+                new_name = file.name.replace(ext, "xlsx")
 
             output.seek(0)
             st.download_button(
